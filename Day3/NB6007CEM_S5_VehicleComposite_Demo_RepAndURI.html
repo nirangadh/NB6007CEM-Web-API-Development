@@ -1,0 +1,669 @@
+<!--
+  NB6007CEM S5 VehicleComposite — Interactive Demo
+  ═══════════════════════════════════════════════════════════════════════════════
+  WHAT IT DEMONSTRATES
+    LEFT PANEL  — Representation toggle
+      The student selects a resource and flips a JSON / XML toggle.
+      The URI displayed above both panels stays fixed; only the body
+      format changes. This makes the resource/representation distinction
+      tangible in a way a slide cannot: the student watches the URI hold
+      still while the body changes.
+
+    RIGHT PANEL — Scoped URI assembler
+      The student types a vehicle ID into an input and watches the full
+      scoped URI  /api/v1/vehicles/{id}/pings  assemble in real time.
+      This makes URI template substitution and the parent-child scoping
+      relationship obvious.
+
+  WHEN TO OPEN IT
+    Slide 22 of NB6007CEM_S5_VehicleComposite.pptx (Activity slide).
+    Open on the projector, walk through both panels, then ask students
+    to open it on their own devices for 3 minutes.
+
+  WHAT TO ASK STUDENTS
+    Left panel:  "When you flip from JSON to XML — what stays the same?"
+    Left panel:  "Is this the same vehicle in both formats?"
+    Right panel: "When you type a different vehicle ID — what changes?"
+    Right panel: "What is the fixed part of the URI? What is the variable?"
+
+  AUTHOR    Niranga Dharmaratna — niranga@nibm.lk
+  MODULE    NB6007CEM Web API Development — Day 3 AM — Session 5
+  SAFE      Uses no real endpoints. All data is hardcoded illustrative
+            content. Does not call any external service.
+  ═══════════════════════════════════════════════════════════════════════════════
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>S5 Demo — Representations and Scoped URIs</title>
+<style>
+  /* ── Brand palette ────────────────────────────────────────────────────────── */
+  :root {
+    --teal:       #1A9988;
+    --teal-dark:  #137870;
+    --orange:     #EB5600;
+    --near-black: #1A1A1A;
+    --pale-grey:  #E9EDEE;
+    --steel-blue: #6AA4C8;
+    --mint:       #A2FFE8;
+    --sky-blue:   #CFE8FA;
+    --dark-grey:  #595959;
+    --white:      #FFFFFF;
+    --navy:       #1C3678;
+    --json-key:   #EB5600;
+    --json-str:   #1A9988;
+    --json-num:   #1C3678;
+    --xml-tag:    #1A9988;
+    --xml-attr:   #EB5600;
+    --xml-val:    #1C3678;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--pale-grey);
+    color: var(--near-black);
+    min-height: 100vh;
+  }
+
+  /* ── Header ──────────────────────────────────────────────────────────────── */
+  .header {
+    background: var(--near-black);
+    color: var(--white);
+    padding: 14px 24px 12px;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .header-module {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--teal);
+    text-transform: uppercase;
+  }
+  .header-title {
+    font-size: 16px;
+    font-weight: 700;
+  }
+  .header-session {
+    font-size: 12px;
+    color: #888;
+    margin-left: auto;
+  }
+
+  /* ── URI bar (shared, above both panels) ─────────────────────────────────── */
+  .uri-bar {
+    background: var(--near-black);
+    padding: 8px 24px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-top: 1px solid #333;
+  }
+  .uri-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #888;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .uri-value {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 15px;
+    color: var(--mint);
+    font-weight: 600;
+    flex: 1;
+    transition: color 0.2s;
+  }
+  .uri-value.changed {
+    color: var(--orange);
+    animation: flash 0.4s ease;
+  }
+  @keyframes flash {
+    0%   { background: rgba(235,86,0,0.15); border-radius: 3px; }
+    100% { background: transparent; }
+  }
+
+  /* ── Main two-panel layout ───────────────────────────────────────────────── */
+  .panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    min-height: calc(100vh - 120px);
+  }
+
+  /* ── Panel shared ────────────────────────────────────────────────────────── */
+  .panel {
+    padding: 20px 22px;
+    border-right: 2px solid var(--pale-grey);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .panel:last-child { border-right: none; }
+
+  .panel-heading {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--dark-grey);
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--teal);
+  }
+
+  /* ── Controls ────────────────────────────────────────────────────────────── */
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+  select {
+    padding: 7px 10px;
+    border: 2px solid var(--steel-blue);
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+    background: var(--white);
+    color: var(--near-black);
+    cursor: pointer;
+    outline: none;
+    flex: 1;
+    min-width: 140px;
+  }
+  select:focus { border-color: var(--teal); }
+
+  /* Toggle switch */
+  .toggle-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .toggle-label { color: var(--dark-grey); font-size: 12px; }
+  .toggle-label.active { color: var(--teal); }
+
+  .toggle {
+    position: relative;
+    width: 54px;
+    height: 26px;
+    flex-shrink: 0;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-track {
+    position: absolute;
+    inset: 0;
+    background: var(--teal);
+    border-radius: 26px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .toggle input:checked + .toggle-track { background: var(--orange); }
+  .toggle-track::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    left: 3px;
+    top: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.2s;
+  }
+  .toggle input:checked + .toggle-track::after { transform: translateX(28px); }
+
+  /* Code block */
+  .code-block {
+    background: var(--near-black);
+    border-radius: 6px;
+    padding: 14px 16px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.65;
+    flex: 1;
+    overflow-x: auto;
+    white-space: pre;
+    color: var(--white);
+    transition: opacity 0.15s;
+  }
+  .code-block .k { color: var(--json-key); }      /* JSON key / XML tag */
+  .code-block .s { color: var(--json-str); }      /* string value */
+  .code-block .n { color: #A8D8FF; }              /* number value */
+  .code-block .p { color: #888; }                 /* punctuation */
+  .code-block .x { color: var(--xml-attr); }      /* XML attribute name */
+  .code-block .c { color: #666; font-style: italic; } /* comment */
+
+  /* Callout below code block */
+  .callout {
+    background: var(--sky-blue);
+    border-radius: 4px;
+    padding: 10px 13px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--near-black);
+  }
+  .callout strong { color: var(--teal); }
+
+  /* ── Right panel — URI assembler ─────────────────────────────────────────── */
+  .uri-assembler {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .input-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .input-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--dark-grey);
+    letter-spacing: 0.5px;
+  }
+  .vehicle-input {
+    padding: 8px 12px;
+    border: 2px solid var(--steel-blue);
+    border-radius: 4px;
+    font-size: 15px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    color: var(--near-black);
+    background: var(--white);
+    outline: none;
+    width: 100%;
+    transition: border-color 0.2s;
+  }
+  .vehicle-input:focus { border-color: var(--teal); }
+  .vehicle-input.error { border-color: var(--orange); }
+
+  .uri-built {
+    background: var(--near-black);
+    border-radius: 6px;
+    padding: 14px 16px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.8;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .uri-part { display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
+  .uri-fixed { color: #888; }
+  .uri-variable { color: var(--orange); font-weight: 700; transition: color 0.2s; }
+  .uri-variable.empty { color: #555; font-style: italic; }
+  .uri-resource-label {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .label-collection { background: var(--teal); color: white; }
+  .label-item       { background: var(--steel-blue); color: white; }
+  .label-sub        { background: var(--orange); color: white; }
+  .label-fn         { background: var(--navy); color: white; }
+
+  /* Scope explanation */
+  .scope-box {
+    margin-top: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .scope-row {
+    background: var(--white);
+    border: 2px solid var(--pale-grey);
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    display: grid;
+    grid-template-columns: 90px 1fr;
+    gap: 8px;
+    align-items: start;
+  }
+  .scope-row .route {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--teal);
+    white-space: nowrap;
+  }
+  .scope-row .desc { color: var(--dark-grey); }
+  .scope-row.highlighted {
+    border-color: var(--orange);
+    background: #fff8f5;
+  }
+  .scope-row.highlighted .route { color: var(--orange); }
+
+  .hint-box {
+    background: var(--mint);
+    border-radius: 4px;
+    padding: 10px 13px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--near-black);
+  }
+
+  /* Format badge */
+  .format-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+  .badge-json { background: var(--teal); color: white; }
+  .badge-xml  { background: var(--orange); color: white; }
+
+  /* Responsive */
+  @media (max-width: 700px) {
+    .panels { grid-template-columns: 1fr; }
+    .panel  { border-right: none; border-bottom: 2px solid var(--pale-grey); }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────────────────────────── -->
+<div class="header">
+  <span class="header-module">NB6007CEM</span>
+  <span class="header-title">S5 — Representations and Scoped URIs</span>
+  <span class="header-session">Day 3 AM</span>
+</div>
+
+<!-- ── Shared URI bar ────────────────────────────────────────────────────── -->
+<div class="uri-bar">
+  <span class="uri-label">Left panel URI</span>
+  <span class="uri-value" id="sharedUri">/api/v1/vehicles/WP-1234</span>
+</div>
+
+<!-- ── Main panels ───────────────────────────────────────────────────────── -->
+<div class="panels">
+
+  <!-- ── LEFT PANEL: representation toggle ────────────────────────────────── -->
+  <div class="panel" id="leftPanel">
+    <div class="panel-heading">Representation Toggle — same URI, different format</div>
+
+    <div class="controls">
+      <select id="resourceSelect" onchange="updateLeft()">
+        <option value="province">Province (atomic)</option>
+        <option value="district">District (atomic)</option>
+        <option value="station">PoliceStation (atomic)</option>
+        <option value="vehicle" selected>Vehicle (composite)</option>
+        <option value="ping">LocationPing</option>
+        <option value="lastpos">last-position (processing fn)</option>
+      </select>
+
+      <div class="toggle-wrap">
+        <span class="toggle-label" id="lblJson" style="color:var(--teal)">JSON</span>
+        <label class="toggle">
+          <input type="checkbox" id="formatToggle" onchange="updateLeft()">
+          <div class="toggle-track"></div>
+        </label>
+        <span class="toggle-label" id="lblXml">XML</span>
+      </div>
+
+      <span id="formatBadge" class="format-badge badge-json">application/json</span>
+    </div>
+
+    <div class="code-block" id="codeDisplay"></div>
+
+    <div class="callout" id="leftCallout"></div>
+  </div>
+
+  <!-- ── RIGHT PANEL: URI assembler ───────────────────────────────────────── -->
+  <div class="panel" id="rightPanel">
+    <div class="panel-heading">Scoped URI Assembler — type a vehicle ID</div>
+
+    <div class="uri-assembler">
+      <div class="input-row">
+        <label class="input-label" for="vehicleId">Vehicle ID</label>
+        <input type="text" id="vehicleId" class="vehicle-input"
+               placeholder="e.g. WP-1234"
+               maxlength="20"
+               oninput="updateRight()"
+               value="WP-1234">
+      </div>
+
+      <div class="uri-built" id="uriBuild"></div>
+
+      <div class="scope-box" id="scopeBox"></div>
+
+      <div class="hint-box" id="hintBox"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── JavaScript ─────────────────────────────────────────────────────────── -->
+<script>
+/* ─── Data: authoritative JSON shapes ─────────────────────────────────────── */
+const SHAPES = {
+  province: {
+    uri: '/api/v1/provinces/PV-01',
+    json: {
+      "province_id": "PV-01",
+      "name": "Western Province"
+    },
+    xmlTag: 'province',
+    xmlFields: { province_id: 'PV-01', name: 'Western Province' },
+    label: 'Province — atomic resource',
+    note: 'Two fields only. Province does not carry a parent reference — it is the top of the hierarchy.',
+  },
+  district: {
+    uri: '/api/v1/districts/DT-03',
+    json: {
+      "district_id": "DT-03",
+      "name": "Colombo",
+      "province_id": "PV-01"
+    },
+    xmlTag: 'district',
+    xmlFields: { district_id: 'DT-03', name: 'Colombo', province_id: 'PV-01' },
+    label: 'District — atomic resource',
+    note: 'district_id, name, and a parent reference (province_id). The parent is a reference — not a nested Province object.',
+  },
+  station: {
+    uri: '/api/v1/stations/ST-05',
+    json: {
+      "station_id": "ST-05",
+      "name": "Colombo Fort",
+      "district_id": "DT-03"
+    },
+    xmlTag: 'policeStation',
+    xmlFields: { station_id: 'ST-05', name: 'Colombo Fort', district_id: 'DT-03' },
+    label: 'PoliceStation — atomic resource',
+    note: 'Parent reference is district_id. This is a reference, not a nested District object.',
+  },
+  vehicle: {
+    uri: '/api/v1/vehicles/WP-1234',
+    json: {
+      "vehicle_id": "WP-1234",
+      "reg_number": "WP CAA-1234",
+      "device_id":  "DEV-001",
+      "station_id": "ST-05",
+      "last_ping": {
+        "ping_id":   "PNG-98765",
+        "timestamp": "2025-01-15T10:30:00Z",
+        "lat":        6.9271,
+        "lng":        79.8612,
+        "speed":      25
+      }
+    },
+    xmlTag: 'vehicle',
+    xmlFields: {
+      vehicle_id: 'WP-1234', reg_number: 'WP CAA-1234',
+      device_id: 'DEV-001', station_id: 'ST-05',
+    },
+    xmlNested: {
+      tag: 'last_ping',
+      fields: { ping_id: 'PNG-98765', timestamp: '2025-01-15T10:30:00Z', lat: '6.9271', lng: '79.8612', speed: '25' }
+    },
+    label: 'Vehicle — composite resource',
+    note: 'last_ping is embedded as a nested object — NOT flat fields (last_lat, last_lng). This embedding is the composite design decision.',
+  },
+  ping: {
+    uri: '/api/v1/vehicles/WP-1234/pings/PNG-98765',
+    json: {
+      "ping_id":    "PNG-98765",
+      "vehicle_id": "WP-1234",
+      "timestamp":  "2025-01-15T10:30:00Z",
+      "lat":         6.9271,
+      "lng":         79.8612,
+      "speed":       25
+    },
+    xmlTag: 'locationPing',
+    xmlFields: { ping_id: 'PNG-98765', vehicle_id: 'WP-1234', timestamp: '2025-01-15T10:30:00Z', lat: '6.9271', lng: '79.8612', speed: '25' },
+    label: 'LocationPing — from /vehicles/{id}/pings',
+    note: 'A LocationPing in the pings sub-collection carries its own vehicle_id. This makes the record self-contained when read outside the URI context (e.g. in logs).',
+  },
+  lastpos: {
+    uri: '/api/v1/vehicles/WP-1234/last-position',
+    json: {
+      "vehicle_id": "WP-1234",
+      "timestamp":  "2025-01-15T10:30:00Z",
+      "lat":         6.9271,
+      "lng":         79.8612,
+      "speed":       25
+    },
+    xmlTag: 'lastPosition',
+    xmlFields: { vehicle_id: 'WP-1234', timestamp: '2025-01-15T10:30:00Z', lat: '6.9271', lng: '79.8612', speed: '25' },
+    label: 'last-position — processing function resource',
+    note: 'Position data only. No vehicle registration metadata. Named as a noun (§5.1). Derived from the most recent LocationPing row — not stored as a separate field.',
+  },
+};
+
+/* ─── Syntax-highlighted JSON ─────────────────────────────────────────────── */
+function highlightJSON(obj, indent) {
+  indent = indent || 0;
+  const pad = '  '.repeat(indent);
+  const inner = '  '.repeat(indent + 1);
+
+  const entries = Object.entries(obj);
+  if (!entries.length) return '<span class="p">{}</span>';
+
+  const lines = entries.map(([k, v]) => {
+    const key = `<span class="k">"${k}"</span><span class="p">: </span>`;
+    let val;
+    if (v === null)                    val = '<span class="n">null</span>';
+    else if (typeof v === 'boolean')   val = `<span class="n">${v}</span>`;
+    else if (typeof v === 'number')    val = `<span class="n">${v}</span>`;
+    else if (typeof v === 'string')    val = `<span class="s">"${v}"</span>`;
+    else if (typeof v === 'object')    val = highlightJSON(v, indent + 1);
+    return `${inner}${key}${val}`;
+  });
+
+  return `<span class="p">{</span>\n${lines.join('<span class="p">,</span>\n')}\n${pad}<span class="p">}</span>`;
+}
+
+/* ─── XML builder ──────────────────────────────────────────────────────────── */
+function buildXML(shape) {
+  const pad1 = '  ', pad2 = '    ';
+  let lines = [];
+  lines.push(`<span class="c">&lt;?xml version="1.0" encoding="UTF-8"?&gt;</span>`);
+  lines.push(`<span class="k">&lt;${shape.xmlTag}&gt;</span>`);
+
+  for (const [k, v] of Object.entries(shape.xmlFields)) {
+    lines.push(`${pad1}<span class="x">&lt;${k}&gt;</span><span class="s">${v}</span><span class="x">&lt;/${k}&gt;</span>`);
+  }
+
+  if (shape.xmlNested) {
+    const n = shape.xmlNested;
+    lines.push(`${pad1}<span class="k">&lt;${n.tag}&gt;</span>`);
+    for (const [k, v] of Object.entries(n.fields)) {
+      lines.push(`${pad2}<span class="x">&lt;${k}&gt;</span><span class="s">${v}</span><span class="x">&lt;/${k}&gt;</span>`);
+    }
+    lines.push(`${pad1}<span class="k">&lt;/${n.tag}&gt;</span>`);
+  }
+
+  lines.push(`<span class="k">&lt;/${shape.xmlTag}&gt;</span>`);
+  return lines.join('\n');
+}
+
+/* ─── Left panel update ────────────────────────────────────────────────────── */
+function updateLeft() {
+  const key    = document.getElementById('resourceSelect').value;
+  const isXML  = document.getElementById('formatToggle').checked;
+  const shape  = SHAPES[key];
+
+  // URI bar — stays fixed regardless of format
+  const uriEl = document.getElementById('sharedUri');
+  uriEl.textContent = shape.uri;
+
+  // Badge + toggle labels
+  document.getElementById('formatBadge').textContent = isXML ? 'application/xml' : 'application/json';
+  document.getElementById('formatBadge').className   = 'format-badge ' + (isXML ? 'badge-xml' : 'badge-json');
+  document.getElementById('lblJson').style.color = isXML ? 'var(--dark-grey)' : 'var(--teal)';
+  document.getElementById('lblXml').style.color  = isXML ? 'var(--orange)'    : 'var(--dark-grey)';
+
+  // Code block
+  const codeEl = document.getElementById('codeDisplay');
+  codeEl.innerHTML = isXML ? buildXML(shape) : highlightJSON(shape.json);
+
+  // Callout
+  document.getElementById('leftCallout').innerHTML =
+    `<strong>${shape.label}</strong><br>${shape.note}`;
+}
+
+/* ─── Right panel update ───────────────────────────────────────────────────── */
+function updateRight() {
+  const raw = document.getElementById('vehicleId').value.trim();
+  const vid = raw || '{vehicle-id}';
+  const empty = !raw;
+
+  const varCls = empty ? 'uri-variable empty' : 'uri-variable';
+  const varTxt = empty ? '{vehicle-id}' : vid;
+
+  document.getElementById('uriBuild').innerHTML = `
+<div class="uri-part">
+  <span class="uri-fixed">/api/v1/</span><span class="uri-fixed">vehicles/</span><span class="${varCls}">${varTxt}</span>
+  <span class="uri-resource-label label-item">composite</span>
+</div>
+<div class="uri-part">
+  <span class="uri-fixed">/api/v1/vehicles/</span><span class="${varCls}">${varTxt}</span><span class="uri-fixed">/pings</span>
+  <span class="uri-resource-label label-sub">scoped collection</span>
+</div>
+<div class="uri-part">
+  <span class="uri-fixed">/api/v1/vehicles/</span><span class="${varCls}">${varTxt}</span><span class="uri-fixed">/last-position</span>
+  <span class="uri-resource-label label-fn">processing fn</span>
+</div>`;
+
+  const pingsUri = empty ? '/api/v1/vehicles/{vehicle-id}/pings' : `/api/v1/vehicles/${vid}/pings`;
+  const compUri  = empty ? '/api/v1/vehicles/{vehicle-id}'       : `/api/v1/vehicles/${vid}`;
+  const lastUri  = empty ? '/api/v1/vehicles/{vehicle-id}/last-position' : `/api/v1/vehicles/${vid}/last-position`;
+
+  document.getElementById('scopeBox').innerHTML = `
+<div class="scope-row">
+  <span class="route">GET /vehicles/{id}</span>
+  <span class="desc">Vehicle composite — attributes + embedded last_ping. For map overlays that need vehicle context.</span>
+</div>
+<div class="scope-row highlighted">
+  <span class="route">GET /vehicles/{id}/pings</span>
+  <span class="desc">Scoped collection of all pings for this vehicle only. Global GET /pings is a design error (§4.6, §5.6).</span>
+</div>
+<div class="scope-row">
+  <span class="route">GET /vehicles/{id}/last-position</span>
+  <span class="desc">Processing function — position only, no vehicle metadata. Lighter call for coordinate-only dashboards.</span>
+</div>`;
+
+  document.getElementById('hintBox').innerHTML = empty
+    ? '<strong>Type a vehicle ID</strong> to see the URI template substituted in real time above.'
+    : `<strong>Scoping rule:</strong> pings only exist under a specific vehicle. <code style="font-size:11px">${pingsUri}</code> is correct. <code style="font-size:11px">/api/v1/pings</code> — a global pings collection — is a design error: §4.6 and §5.6 require pings to be scoped to their vehicle.`;
+}
+
+/* ─── Initialise ───────────────────────────────────────────────────────────── */
+updateLeft();
+updateRight();
+</script>
+</body>
+</html>
