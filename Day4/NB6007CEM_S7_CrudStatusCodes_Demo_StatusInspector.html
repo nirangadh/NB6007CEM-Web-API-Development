@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<!--
+  NB6007CEM Web API Development - Session 7 Demo
+  HTTP Status and Header Inspector
+
+  DEMONSTRATES: The contrast between what a code generator typically produces
+  and what WSO2 REST API Design Guidelines §7.3 and §9 require for each HTTP
+  scenario in the Sri Lanka Police Tuk-Tuk Monitoring System.
+
+  WHEN TO OPEN: After slide 17 (POST ping wire contrast) or at slide 22 (activity).
+
+  WHAT TO ASK STUDENTS:
+  1. Pick "Device pushes a ping (success)" - identify every difference between
+     the left and right columns. Why does each difference matter?
+  2. Pick "GET without Authorization header" - why must 401 include
+     WWW-Authenticate when 403 does not?
+  3. Pick "POST with wrong API key" - what should the device do next?
+
+  Safe by construction: no network calls, no real auth, all responses simulated.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>S7 Demo - HTTP Status and Header Inspector | NB6007CEM</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --teal:       #1A9988;
+    --teal-light: #d0f0ec;
+    --white:      #FFFFFF;
+    --nearBlack:  #1A1A1A;
+    --paleGrey:   #E9EDEE;
+    --steelBlue:  #6AA4C8;
+    --orange:     #EB5600;
+    --orange-lt:  #FFF8F5;
+    --darkGrey:   #595959;
+    --mint:       #A2FFE8;
+    --skyBlue:    #CFE8FA;
+    --warmGrey:   #BDBDAC;
+    --code-bg:    #1a1a2e;
+    --code-good:  #A2FFE8;
+    --code-bad:   #FF9D6C;
+    --code-text:  #E9EDEE;
+    --code-label: #BDBDAC;
+  }
+
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: var(--paleGrey);
+    color: var(--nearBlack);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── HEADER ─────────────────────────────────────────────────────────────── */
+  header {
+    background: var(--nearBlack);
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+  header .badge {
+    background: var(--teal);
+    color: var(--white);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    letter-spacing: 1px;
+  }
+  header h1 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--white);
+  }
+  header .sub {
+    font-size: 12px;
+    color: var(--warmGrey);
+    margin-left: auto;
+  }
+
+  /* ── MAIN LAYOUT ─────────────────────────────────────────────────────────── */
+  .layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── LEFT PANEL: SCENARIOS ───────────────────────────────────────────────── */
+  .scenarios {
+    width: 260px;
+    min-width: 260px;
+    background: var(--white);
+    border-right: 1px solid #ccc;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+  .scenarios h2 {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--white);
+    background: var(--darkGrey);
+    padding: 8px 14px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .scenario-btn {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 10px 14px;
+    border: none;
+    border-bottom: 1px solid var(--paleGrey);
+    background: var(--white);
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--nearBlack);
+    line-height: 1.4;
+    transition: background 0.15s;
+  }
+  .scenario-btn:hover { background: var(--skyBlue); }
+  .scenario-btn.active {
+    background: var(--teal);
+    color: var(--white);
+    font-weight: 700;
+  }
+  .scenario-btn .code-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 2px;
+    margin-top: 3px;
+    margin-right: 2px;
+  }
+  .code-2xx { background: #d0f0ec; color: #0d7060; }
+  .code-4xx { background: #fde8dc; color: #aa3300; }
+
+  /* ── RIGHT PANEL: COMPARISON ─────────────────────────────────────────────── */
+  .comparison {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .scenario-title {
+    background: var(--steelBlue);
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--nearBlack);
+    flex-shrink: 0;
+  }
+  .scenario-desc {
+    background: var(--skyBlue);
+    padding: 8px 20px;
+    font-size: 12px;
+    color: var(--nearBlack);
+    flex-shrink: 0;
+  }
+
+  .columns {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    gap: 0;
+  }
+
+  .col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-right: 1px solid #ddd;
+  }
+  .col:last-child { border-right: none; }
+
+  .col-header {
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--white);
+    flex-shrink: 0;
+    letter-spacing: 0.5px;
+  }
+  .col-header.wrong { background: var(--warmGrey); color: var(--nearBlack); }
+  .col-header.right { background: var(--teal); }
+
+  .col-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 16px;
+    background: var(--code-bg);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    line-height: 1.7;
+  }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--code-label);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-top: 12px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 3px;
+  }
+  .section-label:first-child { margin-top: 0; }
+
+  .http-method  { color: #79b8ff; font-weight: 700; }
+  .http-path    { color: var(--code-text); }
+  .header-name  { color: #e1b267; }
+  .header-value { color: var(--code-text); }
+  .status-ok    { color: var(--code-good); font-weight: 700; }
+  .status-err   { color: var(--code-bad); font-weight: 700; }
+  .json-key     { color: #9cdcfe; }
+  .json-val     { color: #ce9178; }
+  .comment      { color: #6a9955; font-style: italic; }
+
+  /* ── ANALYSIS BAR ─────────────────────────────────────────────────────────── */
+  .analysis {
+    background: var(--nearBlack);
+    padding: 10px 20px;
+    flex-shrink: 0;
+    border-top: 2px solid var(--orange);
+  }
+  .analysis h3 {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--orange);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .analysis ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    list-style: none;
+    padding: 0;
+  }
+  .analysis li {
+    background: #2a2a3e;
+    border-left: 3px solid var(--teal);
+    padding: 4px 10px;
+    font-size: 12px;
+    color: var(--code-text);
+    flex: 1 1 250px;
+  }
+  .analysis li.defect { border-left-color: var(--orange); }
+
+  /* ── PLACEHOLDER ─────────────────────────────────────────────────────────── */
+  .placeholder {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--code-bg);
+    color: var(--darkGrey);
+    font-size: 14px;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .placeholder .arrow {
+    font-size: 32px;
+    color: var(--teal);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="badge">S7</div>
+  <h1>HTTP Status &amp; Header Inspector</h1>
+  <span class="sub">NB6007CEM Web API Development &nbsp;|&nbsp; WSO2 §7.3 / §9</span>
+</header>
+
+<div class="layout">
+
+  <!-- Left: Scenario chooser -->
+  <nav class="scenarios">
+    <h2>Pick a scenario</h2>
+    <!-- buttons injected by JS -->
+  </nav>
+
+  <!-- Right: Comparison -->
+  <div class="comparison" id="comparison">
+    <div class="placeholder">
+      <span class="arrow">&#8592;</span>
+      <span>Select a scenario to inspect the HTTP wire</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// SCENARIO DATA
+// ═══════════════════════════════════════════════════════════════════════
+
+const SCENARIOS = [
+  {
+    id: 'ping-success',
+    label: 'Device pushes a ping (success)',
+    badge: '201',
+    badgeClass: 'code-2xx',
+    desc: 'IoT GPS device on tuk-tuk WP-1234 sends its current location to the API. This is the write path.',
+    request: {
+      method: 'POST',
+      path: '/vehicles/WP-1234/pings',
+      headers: [
+        ['Content-Type', 'application/json'],
+      ],
+      body: '{ "lat": 6.9271, "lng": 79.8612, "speed": 28 }',
+    },
+    requestCorrect: {
+      method: 'POST',
+      path: '/vehicles/WP-1234/pings',
+      headers: [
+        ['X-API-Key', 'dev-WP-1234-secret'],
+        ['Content-Type', 'application/json'],
+      ],
+      body: '{ "lat": 6.9271, "lng": 79.8612, "speed": 28 }',
+    },
+    wrong: {
+      status: 'HTTP/1.1 200 OK',
+      statusClass: 'status-err',
+      headers: [
+        ['Content-Type', 'application/json'],
+      ],
+      body: '{\n  <json-key>"success"</json-key>: <json-val>true</json-val>\n}',
+    },
+    right: {
+      status: 'HTTP/1.1 201 Created',
+      statusClass: 'status-ok',
+      headers: [
+        ['Location', '/vehicles/WP-1234/pings/PNG-99999'],
+        ['ETag', '"a3f9c2d1"'],
+        ['Last-Modified', 'Wed, 15 Jan 2025 10:30:00 GMT'],
+        ['Content-Type', 'application/json'],
+      ],
+      body: '{\n  <json-key>"ping_id"</json-key>: <json-val>"PNG-99999"</json-val>,\n  <json-key>"vehicle_id"</json-key>: <json-val>"WP-1234"</json-val>,\n  <json-key>"timestamp"</json-key>: <json-val>"2025-01-15T10:30:00Z"</json-val>,\n  <json-key>"lat"</json-key>: <json-val>6.9271</json-val>,\n  <json-key>"lng"</json-key>: <json-val>79.8612</json-val>,\n  <json-key>"speed"</json-key>: <json-val>28</json-val>\n}',
+    },
+    analysis: [
+      { text: '200 vs 201: 200 says "it worked". 201 says "it worked AND a resource was created"', defect: true },
+      { text: 'Missing Location header: client has no URI for the created resource', defect: true },
+      { text: 'Missing ETag: no fingerprint for conditional requests (Session 9)', defect: true },
+      { text: 'Missing Last-Modified: no timestamp anchor for conditional caching', defect: true },
+      { text: 'Missing X-API-Key in request: write path requires device authentication', defect: true },
+      { text: 'Right column response body mirrors the full resource as a GET would return it', defect: false },
+    ]
+  },
+  {
+    id: 'get-vehicle-found',
+    label: 'GET vehicle - vehicle exists',
+    badge: '200',
+    badgeClass: 'code-2xx',
+    desc: 'Police officer requests the record for vehicle WP-1234. The vehicle exists in the system.',
+    request: {
+      method: 'GET',
+      path: '/vehicles/WP-1234',
+      headers: [
+        ['Authorization', 'Basic cG9saWNlOjEyMzQ='],
+        ['Accept', 'application/json'],
+      ],
+      body: null,
+    },
+    wrong: {
+      status: 'HTTP/1.1 200 OK',
+      statusClass: 'status-ok',
+      headers: [['Content-Type', 'application/json']],
+      body: '{\n  <json-key>"id"</json-key>: <json-val>"WP-1234"</json-val>,\n  <json-key>"registration"</json-key>: <json-val>"WP CAB 1234"</json-val>,\n  <json-key>"last_lat"</json-key>: <json-val>6.9271</json-val>,\n  <json-key>"last_lng"</json-key>: <json-val>79.8612</json-val>\n}\n\n<comment>// Generator mistake: last_lat / last_lng as flat\n// fields on Vehicle is the regression arc mistake\n// (introduced S1, S5, S6). Location is a separate\n// resource: LocationPing.</comment>',
+    },
+    right: {
+      status: 'HTTP/1.1 200 OK',
+      statusClass: 'status-ok',
+      headers: [
+        ['ETag', '"b7e91f3a"'],
+        ['Last-Modified', 'Mon, 13 Jan 2025 08:15:00 GMT'],
+        ['Content-Type', 'application/json'],
+      ],
+      body: '{\n  <json-key>"vehicle_id"</json-key>: <json-val>"WP-1234"</json-val>,\n  <json-key>"registration"</json-key>: <json-val>"WP CAB 1234"</json-val>,\n  <json-key>"device_id"</json-key>: <json-val>"DEV-00442"</json-val>,\n  <json-key>"station_id"</json-key>: <json-val>"STN-005"</json-val>,\n  <json-key>"status"</json-key>: <json-val>"active"</json-val>\n}',
+    },
+    analysis: [
+      { text: 'Status code 200 is correct here (resource exists, GET succeeded)', defect: false },
+      { text: 'Missing ETag: responses should fingerprint the resource for conditional GETs (Session 9)', defect: true },
+      { text: 'Regression arc: last_lat/last_lng do not belong on Vehicle - Location is a separate LocationPing resource', defect: true },
+      { text: 'GET is safe: this request can be retried any number of times without side effects', defect: false },
+    ]
+  },
+  {
+    id: 'get-vehicle-missing',
+    label: 'GET vehicle - not found',
+    badge: '404',
+    badgeClass: 'code-4xx',
+    desc: 'Police officer requests a vehicle ID that does not exist in the system.',
+    request: {
+      method: 'GET',
+      path: '/vehicles/WP-9999',
+      headers: [
+        ['Authorization', 'Basic cG9saWNlOjEyMzQ='],
+        ['Accept', 'application/json'],
+      ],
+      body: null,
+    },
+    wrong: {
+      status: 'HTTP/1.1 200 OK',
+      statusClass: 'status-err',
+      headers: [['Content-Type', 'application/json']],
+      body: '{\n  <json-key>"data"</json-key>: <json-val>null</json-val>,\n  <json-key>"message"</json-key>: <json-val>"Vehicle not found"</json-val>\n}\n\n<comment>// Generator mistake: 200 with null is not an error\n// response - it says the request succeeded. But\n// the vehicle does not exist. 200 is factually wrong.</comment>',
+    },
+    right: {
+      status: 'HTTP/1.1 404 Not Found',
+      statusClass: 'status-ok',
+      headers: [['Content-Type', 'application/json']],
+      body: '{\n  <json-key>"code"</json-key>: <json-val>404001</json-val>,\n  <json-key>"message"</json-key>: <json-val>"Vehicle WP-9999 not found"</json-val>,\n  <json-key>"description"</json-key>: <json-val>"No vehicle with this ID exists in the system"</json-val>\n}',
+    },
+    analysis: [
+      { text: '200 + null body is a false success: the client sees HTTP 200 and concludes the request worked', defect: true },
+      { text: '404 is the correct signal: the resource does not exist at this URI', defect: false },
+      { text: 'Error body structure follows WSO2 §11 (covered in full in Session 11)', defect: false },
+    ]
+  },
+  {
+    id: 'post-ping-bad-body',
+    label: 'POST ping - missing required fields',
+    badge: '400',
+    badgeClass: 'code-4xx',
+    desc: 'Device pushes a ping but omits the lat/lng fields (or sends malformed JSON).',
+    request: {
+      method: 'POST',
+      path: '/vehicles/WP-1234/pings',
+      headers: [
+        ['X-API-Key', 'dev-WP-1234-secret'],
+        ['Content-Type', 'application/json'],
+      ],
+      body: '{ "speed": 28 }',
+    },
+    wrong: {
+      status: 'HTTP/1.1 500 Internal Server Error',
+      statusClass: 'status-err',
+      headers: [['Content-Type', 'application/json']],
+      body: '{\n  <json-key>"error"</json-key>: <json-val>"Cannot read property lat of undefined"</json-val>\n}\n\n<comment>// Generator mistake: unhandled exception becomes\n// a 500. The server did not fail - the request was\n// malformed. 400 is the correct code.</comment>',
+    },
+    right: {
+      status: 'HTTP/1.1 400 Bad Request',
+      statusClass: 'status-ok',
+      headers: [['Content-Type', 'application/json']],
+      body: '{\n  <json-key>"code"</json-key>: <json-val>400001</json-val>,\n  <json-key>"message"</json-key>: <json-val>"Validation failed"</json-val>,\n  <json-key>"description"</json-key>: <json-val>"Request body is missing required fields"</json-val>,\n  <json-key>"error"</json-key>: [\n    { <json-key>"code"</json-key>: <json-val>400002</json-val>, <json-key>"message"</json-key>: <json-val>"lat is required"</json-val> },\n    { <json-key>"code"</json-key>: <json-val>400003</json-val>, <json-key>"message"</json-key>: <json-val>"lng is required"</json-val> }\n  ]\n}',
+    },
+    analysis: [
+      { text: '500 means the server crashed. The server did not crash - the request was invalid.', defect: true },
+      { text: '400 tells the client: "your request is the problem; fix it and retry"', defect: false },
+      { text: 'The error array lists individual field-level failures per WSO2 §11', defect: false },
+    ]
+  },
+  {
+    id: 'get-no-auth',
+    label: 'GET without Authorization header',
+    badge: '401',
+    badgeClass: 'code-4xx',
+    desc: 'Police client makes a GET request but omits the Authorization header entirely.',
+    request: {
+      method: 'GET',
+      path: '/vehicles',
+      headers: [
+        ['Accept', 'application/json'],
+      ],
+      body: null,
+    },
+    wrong: {
+      status: 'HTTP/1.1 401 Unauthorized',
+      statusClass: 'status-ok',
+      headers: [['Content-Type', 'application/json']],
+      body: '{\n  <json-key>"error"</json-key>: <json-val>"Unauthorized"</json-val>\n}\n\n<comment>// Almost right - but missing WWW-Authenticate.\n// Without it, the client does not know which scheme\n// to use when it retries. §12.1 requires it.</comment>',
+    },
+    right: {
+      status: 'HTTP/1.1 401 Unauthorized',
+      statusClass: 'status-ok',
+      headers: [
+        ['WWW-Authenticate', 'Basic realm="tuk-tuk-api"'],
+        ['Content-Type', 'application/json'],
+      ],
+      body: '{\n  <json-key>"code"</json-key>: <json-val>401001</json-val>,\n  <json-key>"message"</json-key>: <json-val>"Authentication required"</json-val>,\n  <json-key>"description"</json-key>: <json-val>"This resource requires Basic authentication"</json-val>\n}',
+    },
+    analysis: [
+      { text: '401 status code is correct in both columns', defect: false },
+      { text: 'Missing WWW-Authenticate in left column: client has no guidance on how to authenticate', defect: true },
+      { text: 'WWW-Authenticate: Basic realm="tuk-tuk-api" tells the client exactly what to send next', defect: false },
+      { text: '401 means "retry with credentials". Client software will automatically prompt for credentials when it sees this.', defect: false },
+    ]
+  },
+  {
+    id: 'get-wrong-creds',
+    label: 'GET with wrong credentials',
+    badge: '401',
+    badgeClass: 'code-4xx',
+    desc: 'Police client sends an Authorization header with invalid credentials.',
+    request: {
+      method: 'GET',
+      path: '/vehicles',
+      headers: [
+        ['Authorization', 'Basic d3Jvbmc6Y3JlZHM='],
+        ['Accept', 'application/json'],
+      ],
+      body: null,
+    },
+    wrong: {
+      status: 'HTTP/1.1 403 Forbidden',
+      statusClass: 'status-err',
+      headers: [['Content-Type', 'application/json']],
+      body: '{\n  <json-key>"error"</json-key>: <json-val>"Access denied"</json-val>\n}\n\n<comment>// Generator mistake: using 403 for bad credentials.\n// 403 means "I know who you are; you are not\n// allowed." Bad credentials = 401, not 403.</comment>',
+    },
+    right: {
+      status: 'HTTP/1.1 401 Unauthorized',
+      statusClass: 'status-ok',
+      headers: [
+        ['WWW-Authenticate', 'Basic realm="tuk-tuk-api"'],
+        ['Content-Type', 'application/json'],
+      ],
+      body: '{\n  <json-key>"code"</json-key>: <json-val>401002</json-val>,\n  <json-key>"message"</json-key>: <json-val>"Invalid credentials"</json-val>,\n  <json-key>"description"</json-key>: <json-val>"The provided username or password is incorrect"</json-val>\n}',
+    },
+    analysis: [
+      { text: '403 says "I know who you are". With wrong credentials the server does NOT know who you are.', defect: true },
+      { text: '401 is correct: credentials were rejected; client should retry with correct credentials', defect: false },
+      { text: 'WWW-Authenticate is required on every 401, even when the client already sent an Authorization header', defect: false },
+    ]
+  },
+  {
+    id: 'post-ping-correct-key',
+    label: 'POST with correct API key',
+    badge: '201',
+    badgeClass: 'code-2xx',
+    desc: 'Device sends a ping with the correct API key for the vehicle in the path.',
+    request: {
+      method: 'POST',
+      path: '/vehicles/WP-1234/pings',
+      headers: [
+        ['X-API-Key', 'dev-WP-1234-secret'],
+        ['Content-Type', 'application/json'],
+      ],
+      body: '{ "lat": 6.9271, "lng": 79.8612, "speed": 28 }',
+    },
+    wrong: {
+      status: 'HTTP/1.1 200 OK',
+      statusClass: 'status-err',
+      headers: [['Content-Type', 'application/json']],
+      body: '{\n  <json-key>"id"</json-key>: <json-val>99999</json-val>,\n  <json-key>"created"</json-key>: <json-val>true</json-val>\n}\n\n<comment>// 200 + created:true is ambiguous. Also:\n// no Location header, no ETag, no Last-Modified.</comment>',
+    },
+    right: {
+      status: 'HTTP/1.1 201 Created',
+      statusClass: 'status-ok',
+      headers: [
+        ['Location', '/vehicles/WP-1234/pings/PNG-99999'],
+        ['ETag', '"a3f9c2d1"'],
+        ['Last-Modified', 'Wed, 15 Jan 2025 10:30:00 GMT'],
+        ['Content-Type', 'application/json'],
+      ],
+      body: '{\n  <json-key>"ping_id"</json-key>: <json-val>"PNG-99999"</json-val>,\n  <json-key>"vehicle_id"</json-key>: <json-val>"WP-1234"</json-val>,\n  <json-key>"timestamp"</json-key>: <json-val>"2025-01-15T10:30:00Z"</json-val>,\n  <json-key>"lat"</json-key>: <json-val>6.9271</json-val>,\n  <json-key>"lng"</json-key>: <json-val>79.8612</json-val>,\n  <json-key>"speed"</json-key>: <json-val>28</json-val>\n}',
+    },
+    analysis: [
+      { text: '201 vs 200: use 201 for every POST that creates a new resource, not 200', defect: false },
+      { text: 'Location header: the URI /vehicles/WP-1234/pings/PNG-99999 lets the device find its own ping', defect: false },
+      { text: 'ETag and Last-Modified enable conditional requests on this ping in Session 9', defect: false },
+    ]
+  },
+  {
+    id: 'post-ping-wrong-key',
+    label: 'POST with wrong API key',
+    badge: '401',
+    badgeClass: 'code-4xx',
+    desc: 'Device WP-1234 sends a ping but presents a key belonging to a different vehicle (WP-5678).',
+    request: {
+      method: 'POST',
+      path: '/vehicles/WP-1234/pings',
+      headers: [
+        ['X-API-Key', 'dev-WP-5678-secret'],
+        ['Content-Type', 'application/json'],
+      ],
+      body: '{ "lat": 6.9271, "lng": 79.8612, "speed": 28 }',
+    },
+    wrong: {
+      status: 'HTTP/1.1 200 OK',
+      statusClass: 'status-err',
+      headers: [['Content-Type', 'application/json']],
+      body: '{\n  <json-key>"success"</json-key>: <json-val>true</json-val>\n}\n\n<comment>// No authentication check at all - the generator\n// ignored the X-API-Key header entirely and accepted\n// the push. This is a security failure, not just\n// a style issue.</comment>',
+    },
+    right: {
+      status: 'HTTP/1.1 401 Unauthorized',
+      statusClass: 'status-ok',
+      headers: [['Content-Type', 'application/json']],
+      body: '{\n  <json-key>"code"</json-key>: <json-val>401003</json-val>,\n  <json-key>"message"</json-key>: <json-val>"API key does not match vehicle"</json-val>,\n  <json-key>"description"</json-key>: <json-val>"The provided key is not authorised to write pings for vehicle WP-1234"</json-val>\n}',
+    },
+    analysis: [
+      { text: 'A generator that ignores auth headers is not implementing authentication - it is pretending to', defect: true },
+      { text: '401 stops a device from spoofing another vehicle\'s location history', defect: false },
+      { text: 'Note: no WWW-Authenticate header here because the API-key scheme has no standard challenge format', defect: false },
+    ]
+  },
+  {
+    id: 'get-wrong-accept',
+    label: 'GET with Accept: application/xml',
+    badge: '406',
+    badgeClass: 'code-4xx',
+    desc: 'Client requests vehicle data but asks for XML format. The API only supports JSON.',
+    request: {
+      method: 'GET',
+      path: '/vehicles/WP-1234',
+      headers: [
+        ['Authorization', 'Basic cG9saWNlOjEyMzQ='],
+        ['Accept', 'application/xml'],
+      ],
+      body: null,
+    },
+    wrong: {
+      status: 'HTTP/1.1 200 OK',
+      statusClass: 'status-err',
+      headers: [['Content-Type', 'application/json']],
+      body: '{\n  <json-key>"vehicle_id"</json-key>: <json-val>"WP-1234"</json-val>\n}\n\n<comment>// Generator ignores the Accept header and returns\n// JSON anyway. The client asked for XML and got\n// JSON - a content negotiation failure.\n// §10.1: 406 Not Acceptable is required.</comment>',
+    },
+    right: {
+      status: 'HTTP/1.1 406 Not Acceptable',
+      statusClass: 'status-ok',
+      headers: [['Content-Type', 'application/json']],
+      body: '{\n  <json-key>"code"</json-key>: <json-val>406001</json-val>,\n  <json-key>"message"</json-key>: <json-val>"Not Acceptable"</json-val>,\n  <json-key>"description"</json-key>: <json-val>"This API only supports application/json. XML is not available."</json-val>\n}',
+    },
+    analysis: [
+      { text: 'Ignoring the Accept header violates content negotiation (§10.1)', defect: true },
+      { text: '406 tells the client: "I cannot produce what you asked for"', defect: false },
+      { text: 'In practice: most generators do not implement content negotiation at all. Express does not by default.', defect: false },
+    ]
+  },
+];
+
+// ═══════════════════════════════════════════════════════════════════════
+// RENDER FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════
+
+function buildRequest(req) {
+  if (!req) return '';
+  let html = `<div class="section-label">Request</div>`;
+  html += `<span class="http-method">${req.method}</span> <span class="http-path">${req.path}</span> HTTP/1.1\n`;
+  (req.headers || []).forEach(([k, v]) => {
+    html += `<span class="header-name">${k}</span>: <span class="header-value">${v}</span>\n`;
+  });
+  if (req.body) {
+    html += `\n<span class="json-val">${req.body}</span>`;
+  }
+  return html;
+}
+
+function buildResponse(resp) {
+  let html = `<div class="section-label">Response</div>`;
+  html += `<span class="${resp.statusClass}">${resp.status}</span>\n`;
+  (resp.headers || []).forEach(([k, v]) => {
+    html += `<span class="header-name">${k}</span>: <span class="header-value">${v}</span>\n`;
+  });
+  if (resp.body) {
+    html += `\n${resp.body}`;
+  }
+  return html;
+}
+
+function render(scenario) {
+  const comp = document.getElementById('comparison');
+
+  const reqHtml = scenario.request ? buildRequest(scenario.request) : '';
+  const reqCorrectHtml = scenario.requestCorrect ? buildRequest(scenario.requestCorrect) : reqHtml;
+
+  comp.innerHTML = `
+    <div class="scenario-title">${scenario.label}</div>
+    <div class="scenario-desc">${scenario.desc}</div>
+    <div class="columns">
+      <div class="col">
+        <div class="col-header wrong">What Generators Produce</div>
+        <div class="col-body">${reqHtml}${reqHtml ? '\n\n' : ''}${buildResponse(scenario.wrong)}</div>
+      </div>
+      <div class="col">
+        <div class="col-header right">What §7.3 / §9 Requires</div>
+        <div class="col-body">${reqCorrectHtml}${reqCorrectHtml ? '\n\n' : ''}${buildResponse(scenario.right)}</div>
+      </div>
+    </div>
+    <div class="analysis">
+      <h3>Analysis</h3>
+      <ul>
+        ${scenario.analysis.map(a =>
+          `<li class="${a.defect ? 'defect' : ''}">${a.text}</li>`
+        ).join('')}
+      </ul>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════
+
+function init() {
+  const nav = document.querySelector('.scenarios');
+  SCENARIOS.forEach((s, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'scenario-btn';
+    btn.innerHTML = `
+      <div>${s.label}</div>
+      <span class="code-badge ${s.badgeClass}">${s.badge}</span>
+    `;
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.scenario-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      render(s);
+    });
+    nav.appendChild(btn);
+  });
+
+  // Auto-select the anchor scenario
+  nav.querySelectorAll('.scenario-btn')[0].click();
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
